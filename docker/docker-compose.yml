@@ -1,0 +1,32 @@
+version: '3.7'
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    restart: always
+    volumes:
+      - "./data/mosquitto/conf:/mosquitto/conf"
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    ports:
+      - 1883
+      - 8883    
+    environment:
+      TZ: ${TZ}
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    #network_mode: host
+    networks:
+      frontend-nw:
+        aliases:
+          - mqtt
+
+networks:
+  frontend-nw:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-mosquitto
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:
