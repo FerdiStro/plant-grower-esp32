@@ -2,6 +2,7 @@
 #include <driver/adc.h>
 #include <WiFi.h>
 #include <AsyncMqttClient.h>
+#include <HTTPClient.h>
 extern "C" {
   #include "freertos/FreeRTOS.h"
   #include "freertos/timers.h"
@@ -14,12 +15,19 @@ extern "C" {
 #define MQTT_HOST IPAddress(192, 168, 178, 152)
 #define MQTT_PORT 1883
 
+//Server
+String serverName = "http://192.168.178.86:8081/data/test";
+
 //set to true if Credentials needed
 const boolean needCreed = false;
 #define MQTT_USER ""
 #define MQTT_PW ""
 
 const byte dataIn = 21;
+
+const int pump = 17;
+const int v3 = 35;
+
 
 static const float WET_MAX = 55.00;
 static const float WET_MIN = 75.00;
@@ -38,6 +46,7 @@ const long interval = 10000;
 
 
 void setup(){  
+  pinMode(pump, OUTPUT);
   Serial.begin(115200); 
 
   mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void*)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
@@ -55,14 +64,16 @@ void setup(){
   }
 
   connectToWifi();
+
  
 } 
 
 void loop() {
-
+   digitalWrite(pump, LOW);
    unsigned long currentMillis = millis();
    if (currentMillis - previousMillis >= interval) {
-      
+
+      //Sensor
       previousMillis = currentMillis;
       int sensorValue = analogRead(32);
       float moisture = map(sensorValue, 0, 4095, 0, 100);
@@ -72,11 +83,39 @@ void loop() {
         return;
       }
 
+      //HTTP
+      HTTPClient http;
+      String serverPath = serverName + "?mos=" + String(moisture).c_str();
+      Serial.println("HTTP-Server Port: "+ serverPath);
+      http.begin(serverPath.c_str());      
+      int httpResponseCode = http.GET();
+      if (httpResponseCode>0) {
+        Serial.print("HTTP Response code: ");
+        Serial.println(httpResponseCode);
+        String payload = http.getString();
+        Serial.println(payload);
+      }
+      else {
+        Serial.print("Error code: ");
+        Serial.println(httpResponseCode);
+      } 
+      
+      http.end();
+     
+  
+      
+      //MQTT
       uint16_t packetIdPub1 = mqttClient.publish(MQTT_PUB_MOS, 1, true, String(moisture).c_str());    
       Serial.printf("Publishing on topic %s at QoS 1, packetId: %i", MQTT_PUB_MOS, packetIdPub1);
       Serial.printf("Message: %.2f \n", moisture);
-   
+      
+  
    }
+}
+
+void pumpAct(){
+   digitalWrite(pump, HIGH);
+
 }
 
 void connectToWifi() {
